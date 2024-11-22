@@ -35,15 +35,39 @@ public class Sequence<T>(T[] values, int maxCalls = int.MaxValue)
     public T Get()
     {
 #if DEBUG
+        if (_maxCalls < 1)
+        {
+            string msg = $"The max call count should be greater than zero, but was {_maxCalls}.";
+            throw new SequenceException(msg);
+        }
+#else
+        _maxCalls
+            .Should()
+            .BePositive("the max call count should be at least 1");
+#endif
+
+#if DEBUG
         if (_totalCalls >= _maxCalls)
         {
-            string msg = $"Total calls for sequence should not be greater than {_maxCalls}, but was {_totalCalls}.";
+            string msg = $"Total calls for sequence should not be greater than {_maxCalls}, but was {_totalCalls + 1}.";
             throw new SequenceException(msg);
         }
 #else
         _totalCalls
             .Should()
             .BeLessThan(_maxCalls, $"total calls on the sequence should be less than {_maxCalls}");
+#endif
+
+#if DEBUG
+        if (_index < 0)
+        {
+            string msg = "The Get() method was called before positioning on the first value in the sequence.";
+            throw new SequenceException(msg);
+        }
+#else
+        _index
+            .Should()
+            .BeGreaterThan(-1, "the Next() method must be called before calling the Get() method for the first time");
 #endif
 
         _totalCalls++;
