@@ -48,6 +48,23 @@ public class VerifierTests
     }
 
     [Fact]
+    public void CallOrderActionHasOptionalCallbackAction_ShouldInvokeCallbackActionWhenCallOrderActionIsInvoked()
+    {
+        // Arrange
+        MethodCallOrderVerifier verifier = new();
+        bool callbackHasBeenCalled = false;
+        void callbackAction() => callbackHasBeenCalled = true;
+
+        // Action
+        RegisterMethodCall(verifier, MethodCall_1, 0, callbackAction);
+
+        // Assert
+        callbackHasBeenCalled
+            .Should()
+            .BeTrue();
+    }
+
+    [Fact]
     public void ExpectedFirstMethodCallComesAfterSecondMethodIsCalledTwice_ShouldThrowException()
     {
         // Arrange
@@ -259,6 +276,6 @@ public class VerifierTests
     private static int GetNextCallNumber(int firstCallNumber)
         => firstCallNumber < 0 ? firstCallNumber - 1 : firstCallNumber > 0 ? firstCallNumber + 1 : 0;
 
-    private static void RegisterMethodCall(MethodCallOrderVerifier verifier, MethodCallToken methodCallToken, int callNumber = 0)
-        => verifier.GetCallOrderAction(methodCallToken, callNumber).Invoke();
+    private static void RegisterMethodCall(MethodCallOrderVerifier verifier, MethodCallToken methodCallToken, int callNumber = 0, Action? callbackAction = null)
+        => verifier.GetCallOrderAction(methodCallToken, callNumber, callbackAction).Invoke();
 }

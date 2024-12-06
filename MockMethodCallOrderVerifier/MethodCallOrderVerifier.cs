@@ -16,6 +16,36 @@ using System.Collections.Generic;
 public class MethodCallOrderVerifier
 {
     /// <summary>
+    /// A counter of the number of times the first method call of a <see cref="MethodCallOrder" />
+    /// object has been matched.
+    /// </summary>
+    /// <remarks>
+    /// The counter starts at a negative value and counts up to zero.
+    /// </remarks>
+    private int _firstCallCounter;
+
+    /// <summary>
+    /// The position within the <see cref="MethodCallList" /> where the mock method call matching
+    /// the first method call in the <see cref="MethodCallOrder" /> object was found.
+    /// </summary>
+    private int _firstCallOrder;
+
+    /// <summary>
+    /// A counter of the number of times the second method call of a <see cref="MethodCallOrder" />
+    /// object has been matched.
+    /// </summary>
+    /// <remarks>
+    /// The counter starts at a negative value and counts up to zero.
+    /// </remarks>
+    private int _secondCallCounter;
+
+    /// <summary>
+    /// The position within the <see cref="MethodCallList" /> where the mock method call matching
+    /// the second method call in the <see cref="MethodCallOrder" /> object was found.
+    /// </summary>
+    private int _secondCallOrder;
+
+    /// <summary>
     /// Gets a list of <see cref="MethodCallOrder" /> objects that define the expected order of mock
     /// method calls.
     /// </summary>
@@ -44,14 +74,14 @@ public class MethodCallOrderVerifier
     /// </param>
     private sealed record MethodCallOrder(MethodCall FirstMethodCall, MethodCall SecondMethodCall)
     {
-        public string FirstMethodCallName = FirstMethodCall.MethodCallName;
-        public int FirstMethodCallNumber = FirstMethodCall.MethodCallNumber;
-        public MethodCallToken FirstMethodCallToken = FirstMethodCall.MethodCallToken;
-        public string FirstDisplayName = FirstMethodCall.DisplayName;
-        public string SecondMethodCallName = SecondMethodCall.MethodCallName;
-        public int SecondMethodCallNumber = SecondMethodCall.MethodCallNumber;
-        public MethodCallToken SecondMethodCallToken = SecondMethodCall.MethodCallToken;
-        public string SecondDisplayName = SecondMethodCall.DisplayName;
+        public string FirstMethodCallName => FirstMethodCall.MethodCallName;
+        public int FirstMethodCallNumber => FirstMethodCall.MethodCallNumber;
+        public MethodCallToken FirstMethodCallToken => FirstMethodCall.MethodCallToken;
+        public string FirstDisplayName => FirstMethodCall.DisplayName;
+        public string SecondMethodCallName => SecondMethodCall.MethodCallName;
+        public int SecondMethodCallNumber => SecondMethodCall.MethodCallNumber;
+        public MethodCallToken SecondMethodCallToken => SecondMethodCall.MethodCallToken;
+        public string SecondDisplayName => SecondMethodCall.DisplayName;
     }
 
     /// <summary>
@@ -72,7 +102,7 @@ public class MethodCallOrderVerifier
         /// <summary>
         /// Gets the display name for this method call.
         /// </summary>
-        public string DisplayName = MethodCallNumber == 0
+        public string DisplayName => MethodCallNumber == 0
             ? MethodCallToken.MethodCallName
             : MethodCallNumber < 0
             ? $"{MethodCallToken.MethodCallName}[+{-MethodCallNumber}]"
@@ -105,9 +135,9 @@ public class MethodCallOrderVerifier
     /// <remarks>
     /// A negative value for either <paramref name="firstCallNumber" /> or
     /// <paramref name="secondCallNumber" /> indicates the specific method call number for the
-    /// associated <paramref name="firstCallToken" /> or <paramref name="secondCallToken" /> methods. For
-    /// example, -1 refers to the first time the method is called, -2 the second time the method is
-    /// called, and so on.
+    /// associated <paramref name="firstCallToken" /> or <paramref name="secondCallToken" />
+    /// methods. For example, -1 refers to the first time the method is called, -2 the second time
+    /// the method is called, and so on.
     /// <para>
     /// Positive numbers, on the other hand, are used only to distinguish between instances of a
     /// method that is called multiple times with different parameter values. For example, if
@@ -146,12 +176,20 @@ public class MethodCallOrderVerifier
     /// An optional call number used to distinguish the <paramref name="methodCallToken" /> if the
     /// associated mock method is called with different parameter values in two or more Moq Setups.
     /// </param>
+    /// <param name="callbackAction">
+    /// An optional action delegate that gets invoked when the returned call order action is
+    /// invoked.
+    /// </param>
     /// <returns>
     /// An <see langword="Action" /> that can be assigned to the Callback method of a Moq Setup.
     /// </returns>
-    public Action GetCallOrderAction(MethodCallToken methodCallToken, int callNumber = 0)
+    public Action GetCallOrderAction(MethodCallToken methodCallToken, int callNumber = 0, Action? callbackAction = null)
     {
-        return () => MethodCallList.Add(new(methodCallToken, callNumber));
+        return () =>
+        {
+            callbackAction?.Invoke();
+            MethodCallList.Add(new(methodCallToken, callNumber));
+        };
     }
 
     /// <summary>
@@ -177,154 +215,262 @@ public class MethodCallOrderVerifier
     {
         int counter = 0;
 
-        foreach (MethodCallOrder expectedOrder in ExpectedOrderList)
+        foreach (MethodCallOrder expectedCallOrder in ExpectedOrderList)
         {
-            int firstCallCounter = expectedOrder.FirstMethodCallNumber;
-            int secondCallCounter = expectedOrder.SecondMethodCallNumber;
-            int firstCallOrder = 0;
-            int secondCallOrder = 0;
+            _firstCallCounter = expectedCallOrder.FirstMethodCallNumber;
+            _secondCallCounter = expectedCallOrder.SecondMethodCallNumber;
+            _firstCallOrder = 0;
+            _secondCallOrder = 0;
             counter++;
             string counterPhrase = $" on expected call order #{counter}";
 
-#if DEBUG
-            if (expectedOrder.FirstMethodCall == expectedOrder.SecondMethodCall)
+            ValidateMethodCallOrderSetup(expectedCallOrder, counterPhrase);
+
+            for (int i = 0; i < MethodCallList.Count; i++)
             {
-                string msg = $"The first and second call{counterPhrase} can't both be {expectedOrder.FirstMethodCallName} with call number {expectedOrder.FirstMethodCallNumber}";
-                throw new VerifierException(msg);
+                MethodCall methodCall = MethodCallList[i];
+
+                IncrementMethodCallCounters(methodCall, expectedCallOrder);
+
+                if (IsMatchForFirstMethodCall(methodCall, expectedCallOrder, i))
+                {
+                    continue;
+                }
+
+                if (IsMethodCallOrderMatchFound(methodCall, expectedCallOrder, i))
+                {
+                    break;
+                }
             }
+
+            AssertMethodCallOrderResults(expectedCallOrder, counterPhrase);
+        }
+    }
+
+    /// <summary>
+    /// Assert that the expected mock method call order has been achieved by the unit test.
+    /// </summary>
+    /// <param name="methodCallOrder">
+    /// The <see cref="MethodCallOrder" /> object defining the expected order of two mock method
+    /// calls.
+    /// </param>
+    /// <param name="counterPhrase">
+    /// A text string that identifies where the <paramref name="methodCallOrder" /> is located in
+    /// the list of <see cref="MethodCallOrder" /> objects for the current unit test.
+    /// </param>
+    /// <exception cref="VerifierException" />
+    private void AssertMethodCallOrderResults(MethodCallOrder methodCallOrder, string counterPhrase)
+    {
+#if DEBUG
+        if (_firstCallOrder <= 0)
+        {
+            string msg = $"The call sequence for {methodCallOrder.FirstDisplayName}{counterPhrase} should be greater than 0, but was {_firstCallOrder}";
+            throw new VerifierException(msg);
+        }
+
+        if (_secondCallOrder <= 0)
+        {
+            string msg = $"The call sequence for {methodCallOrder.SecondDisplayName}{counterPhrase} should be greater than 0, but was {_secondCallOrder}";
+            throw new VerifierException(msg);
+        }
+
+        if (_firstCallOrder >= _secondCallOrder)
+        {
+            string msg = $"{methodCallOrder.FirstDisplayName} call sequence should be less than {methodCallOrder.SecondDisplayName} call sequence{counterPhrase}, but was {_firstCallOrder} and {_secondCallOrder}, respectively.";
+            throw new VerifierException(msg);
+        }
+#else
+            _firstCallOrder
+                .Should()
+                .BePositive($"the call sequence for {methodCallOrder.FirstDisplayName}{counterPhrase} should be greater than 0");
+            _secondCallOrder
+                .Should()
+                .BePositive($"the call sequence for {methodCallOrder.SecondDisplayName}{counterPhrase} should be greater than 0");
+            _secondCallOrder
+                .Should()
+                .BeGreaterThan(_firstCallOrder, $"{methodCallOrder.SecondDisplayName}{counterPhrase} should be called after {methodCallOrder.FirstDisplayName}");
+#endif
+    }
+
+    /// <summary>
+    /// Check to see if the given <see cref="MethodCall" /> matches either the first and/or the
+    /// second <see cref="MethodCall" /> in the given <see cref="MethodCallOrder" /> object.
+    /// Increment the appropriate call counter(s) if it does.
+    /// </summary>
+    /// <param name="methodCall">
+    /// The <see cref="MethodCall" /> to be compared to the tokens defined in the given
+    /// <see cref="MethodCallOrder" /> object.
+    /// </param>
+    /// <param name="methodCallOrder">
+    /// A <see cref="MethodCallOrder" /> object that defines the order of two method calls.
+    /// </param>
+    private void IncrementMethodCallCounters(MethodCall methodCall, MethodCallOrder methodCallOrder)
+    {
+        if (_firstCallCounter < 0 && methodCall.MethodCallToken == methodCallOrder.FirstMethodCallToken)
+        {
+            _firstCallCounter++;
+        }
+
+        if (_secondCallCounter < 0 && methodCall.MethodCallToken == methodCallOrder.SecondMethodCallToken)
+        {
+            _secondCallCounter++;
+        }
+    }
+
+    /// <summary>
+    /// Compares the given <see cref="MethodCall" /> against the first method call defined in the
+    /// given <see cref="MethodCallOrder" /> object.
+    /// </summary>
+    /// <param name="methodCall">
+    /// The <see cref="MethodCall" /> to be compared against the <paramref name="methodCallOrder" />
+    /// object.
+    /// </param>
+    /// <param name="methodCallOrder">
+    /// The <see cref="MethodCallOrder" /> object that the <paramref name="methodCall" /> object is
+    /// being compared to.
+    /// </param>
+    /// <param name="position">
+    /// An integer representing the current position in the <see cref="MethodCallList" />.
+    /// </param>
+    /// <returns>
+    /// <see langword="true" /> if the given <see cref="MethodCall" /> is a match for the first
+    /// method call defined in the given <see cref="MethodCallOrder" /> object. Otherwise, returns
+    /// <see langword="false" />.
+    /// </returns>
+    private bool IsMatchForFirstMethodCall(MethodCall methodCall, MethodCallOrder methodCallOrder, int position)
+    {
+        if (_firstCallOrder == 0 && methodCall.MethodCallToken == methodCallOrder.FirstMethodCallToken)
+        {
+            if (_firstCallCounter < 0)
+            {
+                return true;
+            }
+
+            if (methodCallOrder.FirstMethodCallNumber < 0 || methodCall.MethodCallNumber == methodCallOrder.FirstMethodCallNumber)
+            {
+                _firstCallOrder = position + 1;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Compares the given <see cref="MethodCall" /> against the second method call defined in the
+    /// given <see cref="MethodCallOrder" /> object.
+    /// </summary>
+    /// <param name="methodCall">
+    /// The <see cref="MethodCall" /> to be compared against the <paramref name="methodCallOrder" />
+    /// object.
+    /// </param>
+    /// <param name="methodCallOrder">
+    /// The <see cref="MethodCallOrder" /> object that the <paramref name="methodCall" /> object is
+    /// being compared to.
+    /// </param>
+    /// <param name="position">
+    /// An integer representing the current position in the <see cref="MethodCallList" />.
+    /// </param>
+    /// <returns>
+    /// <see langword="true" /> if the given <see cref="MethodCall" /> is a match for the second
+    /// method call defined in the given <see cref="MethodCallOrder" /> object and the first method
+    /// call has previously been matched. Otherwise, returns <see langword="false" />.
+    /// </returns>
+    private bool IsMethodCallOrderMatchFound(MethodCall methodCall, MethodCallOrder methodCallOrder, int position)
+    {
+        if (methodCall.MethodCallToken == methodCallOrder.SecondMethodCallToken)
+        {
+            if (methodCallOrder.SecondMethodCallNumber < 0 && _secondCallOrder > 0)
+            {
+                return false;
+            }
+
+            if (_secondCallCounter < 0)
+            {
+                return false;
+            }
+
+            if (methodCallOrder.SecondMethodCallNumber < 0 || methodCall.MethodCallNumber == methodCallOrder.SecondMethodCallNumber)
+            {
+                _secondCallOrder = position + 1;
+
+                if (_firstCallOrder > 0)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Validate that the given <see cref="MethodCallOrder" /> is logically consistent.
+    /// </summary>
+    /// <param name="methodCallOrder">
+    /// The <see cref="MethodCallOrder" /> to be validated.
+    /// </param>
+    /// <param name="counterPhrase">
+    /// A text string that identifies where the <paramref name="methodCallOrder" /> is located in
+    /// the list of <see cref="MethodCallOrder" /> objects for the current unit test.
+    /// </param>
+    /// <exception cref="VerifierException" />
+    private void ValidateMethodCallOrderSetup(MethodCallOrder methodCallOrder, string counterPhrase)
+    {
+#if DEBUG
+        if (methodCallOrder.FirstMethodCall == methodCallOrder.SecondMethodCall)
+        {
+            string msg = $"The first and second call{counterPhrase} can't both be {methodCallOrder.FirstMethodCallName} with call number {methodCallOrder.FirstMethodCallNumber}";
+            throw new VerifierException(msg);
+        }
 #else
             expectedOrder.FirstCall
                 .Should()
                 .NotBe(expectedOrder.SecondCall, $"the first and second method calls must not both be {expectedOrder.FirstCallName}{counterPhrase}");
 #endif
 
-            if (RelativeMethodCalls.Contains(expectedOrder.FirstMethodCallName))
-            {
+        if (RelativeMethodCalls.Contains(methodCallOrder.FirstMethodCallName))
+        {
 #if DEBUG
-                if (expectedOrder.FirstMethodCallNumber >= 0)
-                {
-                    string msg = $"All instances of {expectedOrder.FirstMethodCallName} should have a negative call number, but found {expectedOrder.FirstMethodCallNumber}{counterPhrase}";
-                    throw new VerifierException(msg);
-                }
+            if (methodCallOrder.FirstMethodCallNumber >= 0)
+            {
+                string msg = $"All instances of {methodCallOrder.FirstMethodCallName} should have a negative call number, but found {methodCallOrder.FirstMethodCallNumber}{counterPhrase}";
+                throw new VerifierException(msg);
+            }
 #else
                 expectedOrder.FirstCallNumber
                     .Should()
                     .BeNegative($"{expectedOrder.FirstCallName}{counterPhrase} must specify a negative call number if any other instances do");
 #endif
-            }
+        }
 
-            if (RelativeMethodCalls.Contains(expectedOrder.SecondMethodCallName))
-            {
+        if (RelativeMethodCalls.Contains(methodCallOrder.SecondMethodCallName))
+        {
 #if DEBUG
-                if (expectedOrder.SecondMethodCallNumber >= 0)
-                {
-                    string msg = $"All instances of {expectedOrder.SecondMethodCallName} should have a negative call number, but found {expectedOrder.SecondMethodCallNumber}{counterPhrase}";
-                    throw new VerifierException(msg);
-                }
+            if (methodCallOrder.SecondMethodCallNumber >= 0)
+            {
+                string msg = $"All instances of {methodCallOrder.SecondMethodCallName} should have a negative call number, but found {methodCallOrder.SecondMethodCallNumber}{counterPhrase}";
+                throw new VerifierException(msg);
+            }
 #else
                 expectedOrder.SecondCallNumber
                     .Should()
                     .BeNegative($"{expectedOrder.SecondCallName}{counterPhrase} must specify a negative call number if any other instances do");
 #endif
-            }
+        }
 
-            if (expectedOrder.FirstMethodCallToken == expectedOrder.SecondMethodCallToken && expectedOrder.FirstMethodCallNumber < 0)
-            {
+        if (methodCallOrder.FirstMethodCallToken == methodCallOrder.SecondMethodCallToken && methodCallOrder.FirstMethodCallNumber < 0)
+        {
 #if DEBUG
-                if (expectedOrder.FirstMethodCallNumber < expectedOrder.SecondMethodCallNumber)
-                {
-                    string msg = $"{expectedOrder.FirstDisplayName} can't come before {expectedOrder.SecondDisplayName}{counterPhrase}";
-                    throw new VerifierException(msg);
-                }
+            if (methodCallOrder.FirstMethodCallNumber < methodCallOrder.SecondMethodCallNumber)
+            {
+                string msg = $"{methodCallOrder.FirstDisplayName} can't come before {methodCallOrder.SecondDisplayName}{counterPhrase}";
+                throw new VerifierException(msg);
+            }
 #else
                 expectedOrder.FirstCallNumber
                     .Should()
                     .BeGreaterThan(expectedOrder.SecondCallNumber, $"{expectedOrder.SecondDisplayName} can't come before {expectedOrder.FirstDisplayName}{counterPhrase}");
-#endif
-            }
-
-            for (int i = 0; i < MethodCallList.Count; i++)
-            {
-                MethodCall methodCall = MethodCallList[i];
-                MethodCallToken methodCallToken = methodCall.MethodCallToken;
-                int methodCallNumber = methodCall.MethodCallNumber;
-
-                if (methodCallToken == expectedOrder.FirstMethodCallToken)
-                {
-                    firstCallCounter++;
-                }
-
-                if (methodCallToken == expectedOrder.SecondMethodCallToken)
-                {
-                    secondCallCounter++;
-                }
-
-                if (firstCallOrder == 0 && methodCallToken == expectedOrder.FirstMethodCallToken)
-                {
-                    if (firstCallCounter < 0)
-                    {
-                        continue;
-                    }
-
-                    if (expectedOrder.FirstMethodCallNumber < 0 || methodCallNumber == expectedOrder.FirstMethodCallNumber)
-                    {
-                        firstCallOrder = i + 1;
-                        continue;
-                    }
-                }
-
-                if (methodCallToken == expectedOrder.SecondMethodCallToken)
-                {
-                    if (expectedOrder.SecondMethodCallNumber < 0 && secondCallOrder > 0)
-                    {
-                        continue;
-                    }
-
-                    if (secondCallCounter < 0)
-                    {
-                        continue;
-                    }
-
-                    if (expectedOrder.SecondMethodCallNumber < 0 || methodCallNumber == expectedOrder.SecondMethodCallNumber)
-                    {
-                        secondCallOrder = i + 1;
-
-                        if (firstCallOrder > 0)
-                        {
-                            break;
-                        }
-                    }
-                }
-            }
-
-#if DEBUG
-            if (firstCallOrder <= 0)
-            {
-                string msg = $"The call sequence for {expectedOrder.FirstDisplayName}{counterPhrase} should be greater than 0, but was {firstCallOrder}";
-                throw new VerifierException(msg);
-            }
-
-            if (secondCallOrder <= 0)
-            {
-                string msg = $"The call sequence for {expectedOrder.SecondDisplayName}{counterPhrase} should be greater than 0, but was {secondCallOrder}";
-                throw new VerifierException(msg);
-            }
-
-            if (firstCallOrder >= secondCallOrder)
-            {
-                string msg = $"{expectedOrder.FirstDisplayName} call sequence should be less than {expectedOrder.SecondDisplayName} call sequence{counterPhrase}, but was {firstCallOrder} and {secondCallOrder}, respectively.";
-                throw new VerifierException(msg);
-            }
-#else
-            firstCallOrder
-                .Should()
-                .BePositive($"the call sequence for {expectedOrder.FirstDisplayName}{counterPhrase} should be greater than 0");
-            secondCallOrder
-                .Should()
-                .BePositive($"the call sequence for {expectedOrder.SecondDisplayName}{counterPhrase} should be greater than 0");
-            secondCallOrder
-                .Should()
-                .BeGreaterThan(firstCallOrder, $"{expectedOrder.SecondDisplayName}{counterPhrase} should be called after {expectedOrder.FirstDisplayName}");
 #endif
         }
     }

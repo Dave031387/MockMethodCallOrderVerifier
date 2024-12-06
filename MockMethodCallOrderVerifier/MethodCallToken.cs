@@ -36,6 +36,7 @@ public class MethodCallToken : IEquatable<MethodCallToken>
         }
 
         MethodCallName = methodCallName;
+        TokenID = ++_counter;
         _methodCallNames.Add(methodCallName);
     }
 
@@ -50,7 +51,10 @@ public class MethodCallToken : IEquatable<MethodCallToken>
     /// <summary>
     /// Gets the unique integer value assigned to this method call token.
     /// </summary>
-    public int TokenID { get; } = ++_counter;
+    public int TokenID
+    {
+        get;
+    }
 
     /// <inheritdoc />
     public bool Equals(MethodCallToken? other) => other is not null && TokenID == other.TokenID;
