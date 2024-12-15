@@ -145,7 +145,10 @@ public class MethodCallOrderVerifier
     /// positive number should be assigned to each call.
     /// </para>
     /// </remarks>
-    public void DefineExpectedCallOrder(MethodCallToken firstCallToken, MethodCallToken secondCallToken, int firstCallNumber = 0, int secondCallNumber = 0)
+    public void DefineExpectedCallOrder(MethodCallToken firstCallToken,
+                                        MethodCallToken secondCallToken,
+                                        int firstCallNumber = 0,
+                                        int secondCallNumber = 0)
     {
         ArgumentNullException.ThrowIfNull(firstCallToken);
         ArgumentNullException.ThrowIfNull(secondCallToken);
@@ -175,6 +178,7 @@ public class MethodCallOrderVerifier
     /// <param name="callNumber">
     /// An optional call number used to distinguish the <paramref name="methodCallToken" /> if the
     /// associated mock method is called with different parameter values in two or more Moq Setups.
+    /// The number must not be less than zero.
     /// </param>
     /// <param name="callbackAction">
     /// An optional action delegate that gets invoked when the returned call order action is
@@ -183,10 +187,24 @@ public class MethodCallOrderVerifier
     /// <returns>
     /// An <see langword="Action" /> that can be assigned to the Callback method of a Moq Setup.
     /// </returns>
-    public Action GetCallOrderAction(MethodCallToken methodCallToken, int callNumber = 0, Action? callbackAction = null)
+    /// <exception cref="VerifierException" />
+    public Action GetCallOrderAction(MethodCallToken methodCallToken,
+                                     int callNumber = 0,
+                                     Action? callbackAction = null)
     {
         return () =>
         {
+#if DEBUG
+            if (callNumber < 0)
+            {
+                string msg = $"The call number on the {nameof(GetCallOrderAction)} method must not be less than zero.";
+                throw new VerifierException(msg);
+            }
+#else
+            callNumber
+                .Should()
+                .BeGreaterThanOrEqualTo(0, $"the call number on the {nameof(GetCallOrderAction)} method should not be less than 0, but was {callNumber}.");
+#endif
             callbackAction?.Invoke();
             MethodCallList.Add(new(methodCallToken, callNumber));
         };
@@ -346,7 +364,7 @@ public class MethodCallOrderVerifier
                 return true;
             }
 
-            if (methodCallOrder.FirstMethodCallNumber < 0 || methodCall.MethodCallNumber == methodCallOrder.FirstMethodCallNumber)
+            if (methodCallOrder.FirstMethodCallNumber < 1 || methodCall.MethodCallNumber == methodCallOrder.FirstMethodCallNumber)
             {
                 _firstCallOrder = position + 1;
                 return true;
@@ -390,7 +408,7 @@ public class MethodCallOrderVerifier
                 return false;
             }
 
-            if (methodCallOrder.SecondMethodCallNumber < 0 || methodCall.MethodCallNumber == methodCallOrder.SecondMethodCallNumber)
+            if (methodCallOrder.SecondMethodCallNumber < 1 || methodCall.MethodCallNumber == methodCallOrder.SecondMethodCallNumber)
             {
                 _secondCallOrder = position + 1;
 
@@ -424,9 +442,9 @@ public class MethodCallOrderVerifier
             throw new VerifierException(msg);
         }
 #else
-            expectedOrder.FirstCall
-                .Should()
-                .NotBe(expectedOrder.SecondCall, $"the first and second method calls must not both be {expectedOrder.FirstCallName}{counterPhrase}");
+        methodCallOrder.FirstMethodCall
+            .Should()
+            .NotBe(methodCallOrder.SecondMethodCall, $"the first and second method calls must not both be {methodCallOrder.FirstMethodCallName}{counterPhrase}");
 #endif
 
         if (RelativeMethodCalls.Contains(methodCallOrder.FirstMethodCallName))
@@ -438,9 +456,9 @@ public class MethodCallOrderVerifier
                 throw new VerifierException(msg);
             }
 #else
-                expectedOrder.FirstCallNumber
-                    .Should()
-                    .BeNegative($"{expectedOrder.FirstCallName}{counterPhrase} must specify a negative call number if any other instances do");
+            methodCallOrder.FirstMethodCallNumber
+                .Should()
+                .BeNegative($"{methodCallOrder.FirstMethodCallName}{counterPhrase} must specify a negative call number if any other instances do");
 #endif
         }
 
@@ -453,9 +471,9 @@ public class MethodCallOrderVerifier
                 throw new VerifierException(msg);
             }
 #else
-                expectedOrder.SecondCallNumber
-                    .Should()
-                    .BeNegative($"{expectedOrder.SecondCallName}{counterPhrase} must specify a negative call number if any other instances do");
+            methodCallOrder.SecondMethodCallNumber
+                .Should()
+                .BeNegative($"{methodCallOrder.SecondMethodCallName}{counterPhrase} must specify a negative call number if any other instances do");
 #endif
         }
 
@@ -468,9 +486,9 @@ public class MethodCallOrderVerifier
                 throw new VerifierException(msg);
             }
 #else
-                expectedOrder.FirstCallNumber
-                    .Should()
-                    .BeGreaterThan(expectedOrder.SecondCallNumber, $"{expectedOrder.SecondDisplayName} can't come before {expectedOrder.FirstDisplayName}{counterPhrase}");
+            methodCallOrder.FirstMethodCallNumber
+                .Should()
+                .BeGreaterThan(methodCallOrder.SecondMethodCallNumber, $"{methodCallOrder.SecondDisplayName} can't come before {methodCallOrder.FirstDisplayName}{counterPhrase}");
 #endif
         }
     }

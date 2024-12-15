@@ -1,6 +1,5 @@
 ﻿namespace MockMethodCallOrderVerifier
 {
-#if DEBUG
     /// <summary>
     /// Exception class for exceptions thrown in the <see cref="Sequence{T}" /> class.
     /// </summary>
@@ -37,5 +36,4 @@
         {
         }
     }
-#endif
 }

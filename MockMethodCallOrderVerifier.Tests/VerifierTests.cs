@@ -48,6 +48,21 @@ public class VerifierTests
     }
 
     [Fact]
+    public void CallOrderActionHasNegativeCallNumber_ShouldThrowException()
+    {
+        // Arrange
+        MethodCallOrderVerifier verifier = new();
+        Action action = verifier.GetCallOrderAction(MethodCall_1, -1);
+        string expected = "The call number on the GetCallOrderAction method must not be less than zero.";
+
+        // Act/Assert
+        action
+            .Should()
+            .ThrowExactly<VerifierException>()
+            .WithMessage(expected);
+    }
+
+    [Fact]
     public void CallOrderActionHasOptionalCallbackAction_ShouldInvokeCallbackActionWhenCallOrderActionIsInvoked()
     {
         // Arrange
@@ -55,13 +70,32 @@ public class VerifierTests
         bool callbackHasBeenCalled = false;
         void callbackAction() => callbackHasBeenCalled = true;
 
-        // Action
+        // Act
         RegisterMethodCall(verifier, MethodCall_1, 0, callbackAction);
 
         // Assert
         callbackHasBeenCalled
             .Should()
             .BeTrue();
+    }
+
+    [Fact]
+    public void ExpectedCallNumberIsZero_ShouldMatchAnyMethodCallNumber()
+    {
+        // Arrange
+        MethodCallOrderVerifier verifier = new();
+        RegisterMethodCall(verifier, MethodCall_1, 1);
+        RegisterMethodCall(verifier, MethodCall_2, 2);
+        RegisterMethodCall(verifier, MethodCall_3, 3);
+        verifier.DefineExpectedCallOrder(MethodCall_1, MethodCall_2, 0, 2);
+        verifier.DefineExpectedCallOrder(MethodCall_2, MethodCall_3, 2);
+        verifier.DefineExpectedCallOrder(MethodCall_1, MethodCall_3);
+        Action action = verifier.Verify;
+
+        // Act/Assert
+        action
+            .Should()
+            .NotThrow();
     }
 
     [Fact]
@@ -130,7 +164,6 @@ public class VerifierTests
     }
 
     [Theory]
-    [InlineData(-1)]
     [InlineData(0)]
     [InlineData(1)]
     public void FirstAndSecondCallNameAndNumberAreSame_ShouldThrowException(int callNumber)

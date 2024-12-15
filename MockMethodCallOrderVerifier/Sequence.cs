@@ -32,7 +32,9 @@ public class Sequence<T>(T[] values, int maxCalls = int.MaxValue)
     /// The current sequence value of type <typeparamref name="T" />.
     /// </returns>
     /// <exception cref="SequenceException" />
-    public T Get()
+#pragma warning disable CA1024 // Use properties where appropriate
+    public T GetCurrent()
+#pragma warning restore CA1024 // Use properties where appropriate
     {
 #if DEBUG
         if (_maxCalls < 1)
@@ -81,13 +83,13 @@ public class Sequence<T>(T[] values, int maxCalls = int.MaxValue)
     /// The next sequence value of type <typeparamref name="T" />.
     /// </returns>
     /// <remarks>
-    /// Calling <see cref="GetNext" /> has the same effect as calling <see cref="Next" />
-    /// followed by <see cref="Get" />.
+    /// Calling <see cref="GetNext" /> has the same effect as calling <see cref="MoveNext" />
+    /// followed by <see cref="GetCurrent" />.
     /// </remarks>
     public T GetNext()
     {
-        Next();
-        return Get();
+        MoveNext();
+        return GetCurrent();
     }
 
     /// <summary>
@@ -95,10 +97,10 @@ public class Sequence<T>(T[] values, int maxCalls = int.MaxValue)
     /// </summary>
     /// <remarks>
     /// Initially the sequence is positioned just before the first value in the sequence.
-    /// Therefore, the first time <see cref="Next" /> is called the position will be moved to
+    /// Therefore, the first time <see cref="MoveNext" /> is called the position will be moved to
     /// the first value in the sequence.
     /// </remarks>
-    public void Next()
+    public void MoveNext()
     {
         if (_index < _maxIndex)
         {

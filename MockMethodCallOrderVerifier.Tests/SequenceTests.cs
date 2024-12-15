@@ -23,11 +23,11 @@ public class SequenceTests
     {
         // Arrange
         Sequence<int> sequence = new([1, 2, 3]);
-        sequence.Next();
+        sequence.MoveNext();
         int expected = 1;
 
         // Act
-        int actual = sequence.Get();
+        int actual = sequence.GetCurrent();
 
         // Assert
         actual
@@ -40,12 +40,12 @@ public class SequenceTests
     {
         // Arrange
         Sequence<int> sequence = new([1, 2, 3]);
-        sequence.Next();
-        sequence.Next();
+        sequence.MoveNext();
+        sequence.MoveNext();
         int expected = 2;
 
         // Act
-        int actual = sequence.Get();
+        int actual = sequence.GetCurrent();
 
         // Assert
         actual
@@ -58,14 +58,14 @@ public class SequenceTests
     {
         // Arrange
         Sequence<int> sequence = new([1, 2, 3]);
-        sequence.Next();
-        sequence.Next();
-        sequence.Next();
-        sequence.Next();
+        sequence.MoveNext();
+        sequence.MoveNext();
+        sequence.MoveNext();
+        sequence.MoveNext();
         int expected = 3;
 
         // Act
-        int actual = sequence.Get();
+        int actual = sequence.GetCurrent();
 
         // Assert
         actual
@@ -78,7 +78,7 @@ public class SequenceTests
     {
         // Arrange
         Sequence<int> sequence = new([1, 2, 3]);
-        Action action = () => sequence.Get();
+        Action action = () => sequence.GetCurrent();
         string expected = "The Get() method was called before positioning on the first value in the sequence.";
 
         // Act/Assert
@@ -93,10 +93,10 @@ public class SequenceTests
     {
         // Arrange
         Sequence<int> sequence = new([1, 2, 3]);
-        sequence.Next();
-        sequence.Next();
-        sequence.Next();
-        sequence.Next();
+        sequence.MoveNext();
+        sequence.MoveNext();
+        sequence.MoveNext();
+        sequence.MoveNext();
         int expected = 3;
 
         // Act
@@ -130,8 +130,8 @@ public class SequenceTests
         Sequence<int> sequence = new([1, 2, 3], 3);
         _ = sequence.GetNext();
         _ = sequence.GetNext();
-        _ = sequence.Get();
-        Action action = () => sequence.Get();
+        _ = sequence.GetCurrent();
+        Action action = () => sequence.GetCurrent();
         string expected = "Total calls for sequence should not be greater than 3, but was 4.";
 
         // Act/Assert
