@@ -392,8 +392,8 @@ As you can see, this example is a bit more complicated than the previous example
 1. The *Callback* method will in turn invoke the *callbackAction* and pass in the string value that was passed into
    the *WriteMessage* method.
 1. The *callbackAction*, when invoked, will:
-   a. Set the *msgSave* variable to the value that was passed into the *WriteMessage* method.
-   a. Invoke the ***GetCallOrderAction*** method of the ***MethodCallOrderVerifier*** class instance. This will cause the verifier
+   - Set the *msgSave* variable to the value that was passed into the *WriteMessage* method.
+   - Invoke the ***GetCallOrderAction*** method of the ***MethodCallOrderVerifier*** class instance. This will cause the verifier
       to save the ***MethodCallToken*** and call number so that the mock method call order can later be verified.
 
 > [!Note]
